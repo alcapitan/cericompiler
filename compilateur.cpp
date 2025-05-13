@@ -24,9 +24,13 @@ void getNextChar()
 Affiche un message d’erreur sur la sortie d’erreur standard.
 Termine le programme immédiatement.
 */
-void ThrowError(string s)
+void ThrowError(string message)
 {
-    cerr << s << endl;
+    cerr << "\033[31m"; // set color to red
+    cerr << "ERREUR : " << message << endl;
+    // indiquer la position de l'erreur après tabulation
+    cerr << "\tCaractère lu : " << currentChar << endl;
+    cerr << "\033[0m"; // reset color
     exit(-1);
 }
 
