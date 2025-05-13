@@ -1,0 +1,6 @@
+# le code du compilateur compilé
+compilateur
+# le code à compiler assemblé
+test.s
+# le code à compiler compilé
+test

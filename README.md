@@ -1,42 +1,35 @@
 # CERIcompiler
 
-A simple compiler.
-From : Pascal-like imperative LL(k) langage
-To : 64 bit 80x86 assembly langage (AT&T)
+**Auteur :** BOYER Alexandre
 
-**Download the repository :**
+Projet de Licence 2 Informatique à Avignon Université.  
+Compilateur écrit en C++ traduisant un langage fictif semblable à Pascal vers le langage Assembleur (64bit 80x86 AT&T).
 
-> git clone git@framagit.org:jourlin/cericompiler.git
+## Utilisation
 
-**Build the compiler with debug symbols :**
+Compiler le compilateur :
 
-> g++ -ggdb compilateur.cpp -o compilateur
+```bash
+g++ compilateur.cpp -o compilateur
+```
 
-**Compile the test program :**
+Utiliser le compilateur :
 
-> cat test.p | ./compilateur > test.s
+```bash
+cat test.pls | ./compilateur > test.s
+```
 
-**Have a look at the output :**
+_Ici le fichier d'entrée contenant un code de notre langage fictif est `test.pls` et le fichier de sortie contenant le code assembleur est `test.s`._
 
-> gedit test.s
+Pour voir le code assembleur généré :
 
-**Produce the executable (with debug info) :**
+```bash
+cat test.s
+```
 
-> gcc -ggdb test.s -o test :
+Pour compiler et exécuter le code assembleur généré :
 
-**Debug the executable :**
-
-> ddd ./test
-
-**Commit the new version :**
-
-> git commit -a -m "What's new..."
-
-**Send to your framagit :**
-
-> git push -u origin master
-
-**Get from your framagit :**
-
-> git pull -u origin master
-
+```bash
+gcc test.s -o test
+./test
+```
