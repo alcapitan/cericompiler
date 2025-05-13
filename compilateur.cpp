@@ -8,80 +8,80 @@ using namespace std;
 // AdditiveOperator := "+" | "-"
 // Digit := "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"
 
-char current; // le caractère en train d'être lu
+char currentChar; // le caractère en train d'être lu
 
 /*
 Lit le prochain caractère non blanc (espace, tab, saut de ligne) depuis cin (entrée standard).
-Met à jour current.
+Met à jour currentChar.
 */
-void ReadChar(void)
+void getNextChar()
 {
-    while (cin.get(current) && (current == ' ' || current == '\t' || current == '\n'))
-        cin.get(current);
+    while (cin.get(currentChar) && (currentChar == ' ' || currentChar == '\t' || currentChar == '\n'))
+        cin.get(currentChar);
 }
 
 /*
 Affiche un message d’erreur sur la sortie d’erreur standard.
 Termine le programme immédiatement.
 */
-void Error(string s)
+void ThrowError(string s)
 {
     cerr << s << endl;
     exit(-1);
 }
 
 /*
-Vérifie que current est un opérateur + ou -.
+Vérifie que currentChar est un opérateur + ou -.
 Si oui, lit le caractère suivant.
 Sinon, déclenche une erreur.
 */
-void AdditiveOperator(void)
+void AdditiveOperator()
 {
-    if (current == '+' || current == '-')
-        ReadChar();
+    if (currentChar == '+' || currentChar == '-')
+        getNextChar();
     else
-        Error("Opérateur additif attendu");
+        ThrowError("Opérateur additif attendu");
 }
 
 /*
-Vérifie si current est un chiffre entre '0' et '9'.
+Vérifie si currentChar est un chiffre entre '0' et '9'.
 Si oui, génère le code assembleur push $<digit> (empile le chiffre).
 Puis lit le caractère suivant.
 */
-void Digit(void)
+void Digit()
 {
-    if ((current < '0') || (current > '9'))
-        Error("Chiffre attendu");
+    if ((currentChar < '0') || (currentChar > '9'))
+        ThrowError("Chiffre attendu");
     else
     {
-        cout << "\tpush $" << current << endl;
-        ReadChar();
+        cout << "\tpush $" << currentChar << endl;
+        getNextChar();
     }
 }
 
 // fonction pour l'instant abstraite, définie plus bas
-void ArithmeticExpression(void);
+void ArithmeticExpression();
 
 /*
 Représente un terme de l'expression :
 Soit un chiffre (via Digit()),
 Soit une sous-expression entre parenthèses.
 */
-void Term(void)
+void Term()
 {
-    if (current == '(')
+    if (currentChar == '(')
     {
-        ReadChar();
+        getNextChar();
         ArithmeticExpression();
-        if (current != ')')
-            Error("')' était attendu"); // ")" expected
+        if (currentChar != ')')
+            ThrowError("')' était attendu"); // ")" expected
         else
-            ReadChar();
+            getNextChar();
     }
-    else if (current >= '0' && current <= '9')
+    else if (currentChar >= '0' && currentChar <= '9')
         Digit();
     else
-        Error("'(' ou chiffre attendu");
+        ThrowError("'(' ou chiffre attendu");
 }
 
 /*
@@ -93,13 +93,13 @@ Pour chaque + ou - rencontré :
   - Applique l'opération : addq ou subq
   - Empile le résultat final avec push %rax.
 */
-void ArithmeticExpression(void)
+void ArithmeticExpression()
 {
     char adop;
     Term();
-    while (current == '+' || current == '-')
+    while (currentChar == '+' || currentChar == '-')
     {
-        adop = current; // Save operator in local variable
+        adop = currentChar; // Save operator in local variable
         AdditiveOperator();
         Term();
         cout << "\tpop %rbx" << endl; // get first operand
@@ -118,7 +118,7 @@ void ArithmeticExpression(void)
 - Gère les erreurs si des caractères supplémentaires sont présents à la fin.
 - Écrit la fin du programme assembleur.
 */
-int main(void)
+int main()
 {
     // First version : Source code on standard input and assembly code on standard output
     // Header for gcc assembler / linker
@@ -129,15 +129,15 @@ int main(void)
     cout << "\tmovq %rsp, %rbp\t\t# Save the position of the stack's top" << endl;
 
     // Let's proceed to the analysis and code production
-    ReadChar();
+    getNextChar();
     ArithmeticExpression();
-    ReadChar();
+    getNextChar();
     // Trailer for the gcc assembler / linker
     cout << "\tmovq %rbp, %rsp\t\t# Restore the position of the stack's top" << endl;
     cout << "\tret\t\t\t# Return from main function" << endl;
-    if (cin.get(current))
+    if (cin.get(currentChar))
     {
-        cerr << "Caractères en trop à la fin du programme : [" << current << "]";
-        Error("."); // unexpected characters at the end of program
+        cerr << "Caractères en trop à la fin du programme : [" << currentChar << "]";
+        ThrowError("."); // unexpected characters at the end of program
     }
 }
