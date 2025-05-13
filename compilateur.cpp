@@ -9,15 +9,17 @@ using namespace std;
 // Digit := "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"
 
 char currentChar; // le caractère en train d'être lu
+char nextChar;    // le caractère suivant
 
 /*
 Lit le prochain caractère non blanc (espace, tab, saut de ligne) depuis cin (entrée standard).
-Met à jour currentChar.
+Met à jour currentChar et nextChar.
 */
 void getNextChar()
 {
-    while (cin.get(currentChar) && (currentChar == ' ' || currentChar == '\t' || currentChar == '\n'))
-        cin.get(currentChar);
+    currentChar = nextChar;
+    while (cin.get(nextChar) && (nextChar == ' ' || nextChar == '\t' || nextChar == '\n'))
+        cin.get(nextChar);
 }
 
 /*
@@ -47,20 +49,21 @@ void AdditiveOperator()
         ThrowError("Opérateur additif attendu");
 }
 
-/*
-Vérifie si currentChar est un chiffre entre '0' et '9'.
-Si oui, génère le code assembleur push $<digit> (empile le chiffre).
-Puis lit le caractère suivant.
-*/
-void Digit()
+// lire un nombre (suite de Digit())
+void Number()
 {
+    int number = 0;
+
     if ((currentChar < '0') || (currentChar > '9'))
         ThrowError("Chiffre attendu");
-    else
+
+    while (currentChar >= '0' && currentChar <= '9')
     {
-        cout << "\tpush $" << currentChar << endl;
+        number *= 10;                // Décalage à gauche
+        number += currentChar - '0'; // cast char to int
         getNextChar();
     }
+    cout << "\tpush $" << number << endl;
 }
 
 // fonction pour l'instant abstraite, définie plus bas
@@ -83,7 +86,7 @@ void Term()
             getNextChar();
     }
     else if (currentChar >= '0' && currentChar <= '9')
-        Digit();
+        Number();
     else
         ThrowError("'(' ou chiffre attendu");
 }
@@ -99,7 +102,7 @@ Pour chaque + ou - rencontré :
 */
 void ArithmeticExpression()
 {
-    char adop;
+    char adop; // ADditive OPerator
     Term();
     while (currentChar == '+' || currentChar == '-')
     {
@@ -131,6 +134,7 @@ int main()
     cout << "\t.globl main\t# The main function must be visible from outside" << endl;
     cout << "main:" << endl;
     cout << "\tmovq %rsp, %rbp\t\t# Save the position of the stack's top" << endl;
+    getNextChar();
 
     // Let's proceed to the analysis and code production
     getNextChar();
@@ -141,7 +145,6 @@ int main()
     cout << "\tret\t\t\t# Return from main function" << endl;
     if (cin.get(currentChar))
     {
-        cerr << "Caractères en trop à la fin du programme : [" << currentChar << "]";
-        ThrowError("."); // unexpected characters at the end of program
+        ThrowError("Caractères supplémentaires à la fin de l'expression");
     }
 }
