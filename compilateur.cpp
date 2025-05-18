@@ -11,6 +11,8 @@ using namespace std;
 
 char currentChar;                              // le caractère en train d'être lu
 char nextChar;                                 // le caractère suivant
+int nbLineRead = 1;                            // le numéro de la ligne lue
+int nbCharInlineRead = 1;                      // le numéro du caractère lu dans une ligne
 int jmpId = 0;                                 // permet d'identifier chaque condition
 unordered_map<string, bool> variablesDeclares; // tableau de variables déclarées (nom, et si elles sont initialisées)
 
@@ -24,8 +26,8 @@ void ThrowError(string message)
 {
     cerr << "\033[31m"; // set color to red
     cerr << "ERREUR : " << message << endl;
-    // indiquer la position de l'erreur après tabulation
-    cerr << "\tCaractère lu : " << currentChar << endl;
+    cerr << "\tPosition : ligne " << nbLineRead << ", caractère " << nbCharInlineRead - 2 << endl;
+    cerr << "\tCaractères lus : " << currentChar << nextChar << endl;
     cerr << "\033[0m"; // reset color
     exit(-1);
 }
@@ -48,12 +50,23 @@ void getNextChar()
 {
     currentChar = nextChar;
     nextChar = cin.get();
+    nbCharInlineRead++;
+    // PrintDebug("Caractère ++ " + to_string(nbCharInlineRead));
     while (nextChar == ' ' || nextChar == '\t' || nextChar == '\n')
     {
+        if (nextChar == '\n')
+        {
+            PrintDebug("Saut de ligne");
+            nbLineRead++;
+            nbCharInlineRead = 1;
+        }
         nextChar = cin.get();
+        nbCharInlineRead++;
+        // PrintDebug("Caractère ++" + to_string(nbCharInlineRead));
     }
 
     PrintDebug("Caractère lu : " + string(1, currentChar));
+
     /** debug++;
     if (debug > 40)
     {
@@ -288,6 +301,44 @@ void Expression()
     }
 }
 
+void AssignationInstruction()
+{
+    PrintDebug("AssignationInstruction()");
+
+    string nomVariable;
+    while ((currentChar >= 'a' && currentChar <= 'z') || (currentChar >= 'A' && currentChar <= 'Z') || (currentChar >= '0' && currentChar <= '9') || currentChar == '_')
+    {
+        nomVariable += currentChar; // on lit le nom de la variable
+        getNextChar();
+    }
+    if (nomVariable.empty())
+        ThrowError("Nom de variable attendu");
+    // si le nom de la variable n'est pas déclarée
+    if (variablesDeclares.find(nomVariable) == variablesDeclares.end())
+        ThrowError("Variable non déclarée : " + nomVariable);
+    else
+        variablesDeclares[nomVariable] = true; // on déclare la variable comme initialisée/assignée/utilisée
+
+    if (currentChar != '=')
+        ThrowError("Assignation '=' attendu");
+    else
+        getNextChar();
+
+    Expression();
+}
+
+void Instruction()
+{
+    PrintDebug("Instruction()");
+    if (currentChar == ';')
+        ThrowError("Instruction vide");
+    AssignationInstruction();
+    if (currentChar != ';')
+        ThrowError("Fin instruction inattendue, ';' manquant");
+    else
+        getNextChar(); // on sort de l'instruction
+}
+
 void PartieDeclarationVariables()
 {
     PrintDebug("PartieDeclarationVariables()");
@@ -331,7 +382,13 @@ void PartieAlgorithme()
     cout << "main:" << endl;
     cout << "\tmovq	%rsp, %rbp\t\t# Save the position of the stack's top" << endl;
 
-    Expression();
+    Instruction();
+    while (currentChar != '.') // fin d'une instruction, on boucle si y en a plusieurs
+    {
+        Instruction();
+    }
+    if (currentChar != '.') // fin du programme
+        ThrowError("'.' attendu");
 
     // Trailer for the gcc assembler / linker
     cout << "\tmovq	%rbp, %rsp\t\t# Restore the position of the stack's top" << endl;
