@@ -14,28 +14,6 @@ int jmpId = 0;    // permet d'identifier chaque condition
 int debug = 0;    // pour le débogage
 
 /*
-Lit le prochain caractère non blanc (espace, tab, saut de ligne) depuis cin (entrée standard).
-Met à jour currentChar et nextChar.
-*/
-void getNextChar()
-{
-    currentChar = nextChar;
-    nextChar = cin.get();
-    while (nextChar == ' ' || nextChar == '\t' || nextChar == '\n')
-    {
-        nextChar = cin.get();
-    }
-
-    cout << "\t# Caractère lu : " << currentChar << endl;
-    debug++;
-    if (debug > 40)
-    {
-        cerr << "Trop de caractères lus, abandon." << endl;
-        exit(-1);
-    }
-}
-
-/*
 Affiche un message d’erreur sur la sortie d’erreur standard.
 Termine le programme immédiatement.
 */
@@ -50,22 +28,40 @@ void ThrowError(string message)
 }
 
 /*
-Vérifie que currentChar est un opérateur + ou -.
-Si oui, lit le caractère suivant.
-Sinon, déclenche une erreur.
+Affiche un message de débogage sur la sortie d’erreur standard.
 */
-void AdditiveOperator()
+void PrintDebug(string message)
 {
-    if (currentChar == '+' || currentChar == '-')
-        getNextChar();
-    else
-        ThrowError("Opérateur additif attendu");
+    cerr << "\033[34m"; // set color to blue
+    cerr << "\t# " << message << endl;
+    cerr << "\033[0m"; // reset color
+}
+
+/*
+Lit le prochain caractère non blanc (espace, tab, saut de ligne) depuis cin (entrée standard).
+Met à jour currentChar et nextChar.
+*/
+void getNextChar()
+{
+    currentChar = nextChar;
+    nextChar = cin.get();
+    while (nextChar == ' ' || nextChar == '\t' || nextChar == '\n')
+    {
+        nextChar = cin.get();
+    }
+
+    PrintDebug("Caractère lu : " + string(1, currentChar));
+    debug++;
+    if (debug > 40)
+    {
+        ThrowError("Trop de caractères lus");
+    }
 }
 
 // lire un nombre (suite de Digit())
 void Number()
 {
-    cout << "\t# Number()" << endl;
+    PrintDebug("Number()");
     int number = 0;
 
     if ((currentChar < '0') || (currentChar > '9'))
@@ -77,7 +73,7 @@ void Number()
         number += currentChar - '0'; // cast char to int
         getNextChar();               // on lit le caractère suivant, soit le prochain chiffre du nombre, soit l'opérateur du chiffre
     }
-    cout << "\tpush $" << number << endl;
+    cout << "\tpush	$" << number << endl;
 }
 
 // fonction pour l'instant abstraite, définie plus bas
@@ -88,9 +84,9 @@ Représente un terme de l'expression :
 Soit un chiffre (via Digit()),
 Soit une sous-expression entre parenthèses.
 */
-void Term()
+void Factor()
 {
-    cout << "\t# Term()" << endl;
+    PrintDebug("Factor()");
     if (currentChar == '(')
     {
         getNextChar();
@@ -106,6 +102,50 @@ void Term()
         ThrowError("'(' ou chiffre attendu");
 }
 
+void MultiplicativeOperator()
+{
+    PrintDebug("MultiplicativeOperator()");
+    if (currentChar == '*' || currentChar == '/')
+        getNextChar();
+    else
+        ThrowError("Opérateur multiplicatif attendu");
+}
+
+void Term()
+{
+    PrintDebug("Term()");
+    Factor();
+    // si le calcul se poursuit, ou se termine
+    while (currentChar == '*' || currentChar == '/')
+    {
+        char operateur = currentChar;
+        getNextChar();
+        Factor();
+        PrintDebug("calcul");
+        cout << "\tpop	%rbx" << endl; // premier opérande
+        cout << "\tpop	%rax" << endl; // second opérande
+        if (operateur == '*')
+            cout << "\timul	%rbx, %rax" << endl; // multiply both operands
+        else if (operateur == '/')
+            cout << "\tidiv	%rbx, %rax" << endl; // divide both operands
+        cout << "\tpush	%rax" << endl;           // store result
+    }
+}
+
+/*
+Vérifie que currentChar est un opérateur + ou -.
+Si oui, lit le caractère suivant.
+Sinon, déclenche une erreur.
+*/
+void AdditiveOperator()
+{
+    PrintDebug("AdditiveOperator()");
+    if (currentChar == '+' || currentChar == '-')
+        getNextChar();
+    else
+        ThrowError("Opérateur additif attendu");
+}
+
 /*
 Pour chaque + ou - rencontré :
 - Sauvegarde l'opérateur.
@@ -117,23 +157,27 @@ Pour chaque + ou - rencontré :
 */
 void ArithmeticExpression()
 {
-    cout << "\t# ArithmeticExpression()" << endl;
+    PrintDebug("ArithmeticExpression()");
     char adop; // ADditive OPerator
     Term();
-    cout << "\t# on a fini de lire un nombre" << endl;
+    // si le calcul se poursuit, ou se termine
     while (currentChar == '+' || currentChar == '-')
     {
         adop = currentChar; // Save operator in local variable
-        cout << "\t# notre opérateur est " << adop << endl;
         AdditiveOperator();
         Term();
-        cout << "\tpop %rbx" << endl; // get first operand
-        cout << "\tpop %rax" << endl; // get second operand
+        PrintDebug("calcul");
+        cout << "\tpop	%rbx" << endl; // get first operand
+        cout << "\tpop	%rax" << endl; // get second operand
         if (adop == '+')
-            cout << "\taddq	%rbx, %rax" << endl; // add both operands
-        else
-            cout << "\tsubq	%rbx, %rax" << endl; // substract both operands
-        cout << "\tpush %rax" << endl;           // store result
+        {
+            cout << "\tadd	%rbx, %rax" << endl; // add both operands
+        }
+        else if (adop == '-')
+        {
+            cout << "\tsub	%rbx, %rax" << endl; // substract both operands
+        }
+        cout << "\tpush	%rax" << endl; // store result
     }
 }
 
@@ -151,6 +195,7 @@ enum CmpOperator
 // CompareOperator := "<" | "<=" | ">" | ">=" | "==" | "!="
 CmpOperator CompareOperator()
 {
+    PrintDebug("CompareOperator()");
     CmpOperator opRead;
     if (nextChar == '=')
     {
@@ -196,44 +241,45 @@ CmpOperator CompareOperator()
 
 void Expression()
 {
-    cout << "\t# Expression()" << endl;
+    PrintDebug("Expression()");
     ArithmeticExpression();
     if (currentChar == '<' || currentChar == '>' || currentChar == '=')
     {
         CmpOperator cmpOp;
         cmpOp = CompareOperator();
         ArithmeticExpression();
-        cout << "\tpop %rbx" << endl; // get first operand
-        cout << "\tpop %rax" << endl; // get second operand
-        cout << "\tcmp %rbx, %rax" << endl;
+        PrintDebug("comparaison");
+        cout << "\tpop	%rbx" << endl; // get first operand
+        cout << "\tpop	%rax" << endl; // get second operand
+        cout << "\tcmp	%rbx, %rax" << endl;
         switch (cmpOp)
         {
         case LT:
-            cout << "\tjl .true" << jmpId << endl;
+            cout << "\tjl	.true" << jmpId << endl;
             break;
         case LE:
-            cout << "\tjle .true" << jmpId << endl;
+            cout << "\tjle	.true" << jmpId << endl;
             break;
         case GT:
-            cout << "\tjg .true" << jmpId << endl;
+            cout << "\tjg	.true" << jmpId << endl;
             break;
         case GE:
-            cout << "\tjge .true" << jmpId << endl;
+            cout << "\tjge	.true" << jmpId << endl;
             break;
         case EQ:
-            cout << "\tje .true" << jmpId << endl;
+            cout << "\tje	.true" << jmpId << endl;
             break;
         case NE:
-            cout << "\tjne .true" << jmpId << endl;
+            cout << "\tjne	.true" << jmpId << endl;
             break;
         default:
             ThrowError("Opérateur de comparaison attendu");
             break;
         }
-        cout << "\tpush $0" << endl; // false
-        cout << "\tjmp .next" << jmpId << endl;
+        cout << "\tpush	$-1" << endl; // false
+        cout << "\tjmp	.next" << jmpId << endl;
         cout << ".true" << jmpId << ":" << endl;
-        cout << "\tpush $1" << endl; // true
+        cout << "\tpush	$0" << endl; // true
         cout << ".next" << jmpId << ":" << endl;
         jmpId++;
     }
@@ -251,10 +297,10 @@ int main()
     // Header for gcc assembler / linker
     cout << "# Ce code a été généré par le please-compilateur" << endl;
     cout << ".text\t\t# The following lines contain the program" << endl;
-    cout << "\t.globl main\t# The main function must be visible from outside" << endl;
+    cout << "\t.globl	main\t# The main function must be visible from outside" << endl;
     cout << "main:" << endl;
-    cout << "\tmovq %rsp, %rbp\t\t# Save the position of the stack's top" << endl;
-    cout << "\t# Main()" << endl;
+    cout << "\tmovq	%rsp, %rbp\t\t# Save the position of the stack's top" << endl;
+    PrintDebug("Main()");
     getNextChar(); // initialise la lecture (la première fois c'est vide)
 
     // Let's proceed to the analysis and code production
@@ -263,7 +309,7 @@ int main()
     getNextChar();
 
     // Trailer for the gcc assembler / linker
-    cout << "\tmovq %rbp, %rsp\t\t# Restore the position of the stack's top" << endl;
+    cout << "\tmovq	%rbp, %rsp\t\t# Restore the position of the stack's top" << endl;
     cout << "\tret\t\t\t# Return from main function" << endl;
     if (cin.get(currentChar))
     {
