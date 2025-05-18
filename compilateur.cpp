@@ -14,7 +14,7 @@ char nextChar;                                 // le caractère suivant
 int jmpId = 0;                                 // permet d'identifier chaque condition
 unordered_map<string, bool> variablesDeclares; // tableau de variables déclarées (nom, et si elles sont initialisées)
 
-int debug = 0; // pour le débogage
+// int debug = 0; // pour le débogage de la lecture des caractères
 
 /*
 Affiche un message d’erreur sur la sortie d’erreur standard.
@@ -54,11 +54,11 @@ void getNextChar()
     }
 
     PrintDebug("Caractère lu : " + string(1, currentChar));
-    debug++;
+    /** debug++;
     if (debug > 40)
     {
         ThrowError("Trop de caractères lus");
-    }
+    }*/
 }
 
 // lire un nombre (suite de Digit())
@@ -298,22 +298,22 @@ void PartieDeclarationVariables()
     while (currentChar != ']')
     {
         string nomVariable;
-        if (currentChar < 'a' || currentChar > 'z')
-            ThrowError("Nom de variable attendu");
-        while (currentChar >= 'a' && currentChar <= 'z')
+        while ((currentChar >= 'a' && currentChar <= 'z') || (currentChar >= 'A' && currentChar <= 'Z') || (currentChar >= '0' && currentChar <= '9') || currentChar == '_')
         {
             nomVariable += currentChar; // on lit le nom de la variable
             getNextChar();
-            // si le nom de la variable est déjà déclaré
-            if (variablesDeclares.find(nomVariable) != variablesDeclares.end())
-            {
-                ThrowError("Variable déjà déclarée : " + nomVariable);
-            }
-            else
-            {
-                variablesDeclares[nomVariable] = false;                      // on déclare la variable dans notre liste
-                cout << "\t" << nomVariable << ":\t\t" << ".quad 0" << endl; // on déclare la variable
-            }
+        }
+        if (nomVariable.empty())
+            ThrowError("Nom de variable attendu");
+        // si le nom de la variable est déjà déclaré
+        if (variablesDeclares.find(nomVariable) != variablesDeclares.end())
+        {
+            ThrowError("Variable déjà déclarée : " + nomVariable);
+        }
+        else
+        {
+            variablesDeclares[nomVariable] = false;                    // on déclare la variable dans notre liste
+            cout << "\t" << nomVariable << ":\t" << ".quad 0" << endl; // on déclare la variable
         }
         if (currentChar == ',') // variable suivante
             getNextChar();
@@ -326,9 +326,8 @@ void PartieDeclarationVariables()
 void PartieAlgorithme()
 {
     PrintDebug("PartieAlgorithme()");
-    cout << "# Ce code a été généré par le please-compilateur" << endl;
     cout << ".text\t\t# The following lines contain the program" << endl;
-    cout << "\t.globl	main\t# The main function must be visible from outside" << endl;
+    cout << "\t.globl	main\t\t# The main function must be visible from outside" << endl;
     cout << "main:" << endl;
     cout << "\tmovq	%rsp, %rbp\t\t# Save the position of the stack's top" << endl;
 
