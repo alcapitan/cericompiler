@@ -1,6 +1,7 @@
-#include <string>
 #include <iostream>
 #include <cstdlib>
+#include <string>
+#include <unordered_map>
 using namespace std;
 
 // ArithmeticExpression := Term {AdditiveOperator Term}
@@ -8,10 +9,12 @@ using namespace std;
 // AdditiveOperator := "+" | "-"
 // Digit := "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"
 
-char currentChar; // le caractère en train d'être lu
-char nextChar;    // le caractère suivant
-int jmpId = 0;    // permet d'identifier chaque condition
-int debug = 0;    // pour le débogage
+char currentChar;                              // le caractère en train d'être lu
+char nextChar;                                 // le caractère suivant
+int jmpId = 0;                                 // permet d'identifier chaque condition
+unordered_map<string, bool> variablesDeclares; // tableau de variables déclarées (nom, et si elles sont initialisées)
+
+int debug = 0; // pour le débogage
 
 /*
 Affiche un message d’erreur sur la sortie d’erreur standard.
@@ -285,6 +288,64 @@ void Expression()
     }
 }
 
+void PartieDeclarationVariables()
+{
+    PrintDebug("PartieDeclarationVariables()");
+    if (currentChar != '[')
+        ThrowError("'[' attendu");
+    cout << ".data" << endl;
+    getNextChar();
+    while (currentChar != ']')
+    {
+        string nomVariable;
+        if (currentChar < 'a' || currentChar > 'z')
+            ThrowError("Nom de variable attendu");
+        while (currentChar >= 'a' && currentChar <= 'z')
+        {
+            nomVariable += currentChar; // on lit le nom de la variable
+            getNextChar();
+            // si le nom de la variable est déjà déclaré
+            if (variablesDeclares.find(nomVariable) != variablesDeclares.end())
+            {
+                ThrowError("Variable déjà déclarée : " + nomVariable);
+            }
+            else
+            {
+                variablesDeclares[nomVariable] = false;                      // on déclare la variable dans notre liste
+                cout << "\t" << nomVariable << ":\t\t" << ".quad 0" << endl; // on déclare la variable
+            }
+        }
+        if (currentChar == ',') // variable suivante
+            getNextChar();
+        else if (currentChar != ']') // si ce n'est ni , ni ] alors c'est une erreur
+            ThrowError("Déclaration variables : ',' attendu");
+    }
+    getNextChar(); // on sort de la partie déclaration variables
+}
+
+void PartieAlgorithme()
+{
+    PrintDebug("PartieAlgorithme()");
+    cout << "# Ce code a été généré par le please-compilateur" << endl;
+    cout << ".text\t\t# The following lines contain the program" << endl;
+    cout << "\t.globl	main\t# The main function must be visible from outside" << endl;
+    cout << "main:" << endl;
+    cout << "\tmovq	%rsp, %rbp\t\t# Save the position of the stack's top" << endl;
+
+    Expression();
+
+    // Trailer for the gcc assembler / linker
+    cout << "\tmovq	%rbp, %rsp\t\t# Restore the position of the stack's top" << endl;
+}
+
+void Program()
+{
+    PrintDebug("Program()");
+    if (currentChar == '[')
+        PartieDeclarationVariables();
+    PartieAlgorithme();
+}
+
 /*
 - Écrit l’en-tête assembleur attendu par le compilateur GNU.
 - Lit une expression arithmétique depuis l'entrée standard.
@@ -295,21 +356,13 @@ int main()
 {
     // First version : Source code on standard input and assembly code on standard output
     // Header for gcc assembler / linker
-    cout << "# Ce code a été généré par le please-compilateur" << endl;
-    cout << ".text\t\t# The following lines contain the program" << endl;
-    cout << "\t.globl	main\t# The main function must be visible from outside" << endl;
-    cout << "main:" << endl;
-    cout << "\tmovq	%rsp, %rbp\t\t# Save the position of the stack's top" << endl;
     PrintDebug("Main()");
     getNextChar(); // initialise la lecture (la première fois c'est vide)
 
     // Let's proceed to the analysis and code production
     getNextChar(); // lit le premier caractère (permet de déterminer ce qu'il faut faire)
-    Expression();
-    getNextChar();
+    Program();
 
-    // Trailer for the gcc assembler / linker
-    cout << "\tmovq	%rbp, %rsp\t\t# Restore the position of the stack's top" << endl;
     cout << "\tret\t\t\t# Return from main function" << endl;
     if (cin.get(currentChar))
     {
