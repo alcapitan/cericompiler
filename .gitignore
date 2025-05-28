@@ -4,3 +4,5 @@ compilateur
 test.s
 # le code à compiler compilé
 test
+# les fichiers de sortie du compilateur
+*.o

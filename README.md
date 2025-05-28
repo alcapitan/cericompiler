@@ -16,10 +16,10 @@ g++ compilateur.cpp -o compilateur
 Utiliser le compilateur :
 
 ```bash
-cat test.pls | ./compilateur > test.s 2> /dev/null
+cat test.p | ./compilateur > test.s 2> /dev/null
 ```
 
-_Ici le fichier d'entrée contenant un code de notre langage fictif est `test.pls` et le fichier de sortie contenant le code assembleur est `test.s`._
+_Ici le fichier d'entrée contenant un code de notre langage fictif est `test.p` et le fichier de sortie contenant le code assembleur est `test.s`._
 
 Pour voir le code assembleur généré :
 

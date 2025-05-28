@@ -1,0 +1,5 @@
+[a,b,c,z]
+(*z:=(8 [RelationalOperator SimpleExpression] ) {AdditiveOperator Term} [RelationalOperator SimpleExpression]*)
+z:=(8==3)||(4==2*2);
+b:=(5/65+2)<(7%5);
+.
