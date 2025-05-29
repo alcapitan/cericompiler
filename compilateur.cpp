@@ -395,7 +395,8 @@ void ForStatement()
         ThrowError("'DO' attendu");
     current = (TOKEN)lexer->yylex();
 
-    Instruction(); // instruction dans la boucle
+    while (strcmp(lexer->YYText(), "ENDFOR") != 0)
+        Instruction(); // instruction dans la boucle
 
     cout << "\tpop " << nomVariableBoucle << endl; // on dépile la variable de boucle pour l'utiliser dans l'instruction d'incrément/decrément
     if (loopIncrement)
@@ -415,8 +416,9 @@ void WhileStatement()
     if (current != KEYWORD || strcmp(lexer->YYText(), "WHILE") != 0)
         ThrowError("'WHILE' attendu");
     current = (TOKEN)lexer->yylex();
-    int loopJmpId = jmpId;                        // on sauvegarde l'ID de la boucle pour pouvoir le réutiliser même quand il sera incrémenté par ses propres instructions
-    jmpId++;                                      // on l'incrémente maintenant pour la différencier de ses propres instructions
+    int loopJmpId = jmpId; // on sauvegarde l'ID de la boucle pour pouvoir le réutiliser même quand il sera incrémenté par ses propres instructions
+    jmpId++;               // on l'incrémente maintenant pour la différencier de ses propres instructions
+
     cout << ".while" << loopJmpId << ":" << endl; // condition de la boucle
     Expression();                                 // expression de la condition
     cout << "\tpop	%rax" << endl;
@@ -424,8 +426,11 @@ void WhileStatement()
     cout << "\tje	.endwhile" << loopJmpId << endl; // si la condition est fausse, on sort de la boucle
     if (current != KEYWORD || strcmp(lexer->YYText(), "DO") != 0)
         ThrowError("'DO' attendu");
-    current = (TOKEN)lexer->yylex();                 // sinon on exécute la ligne suivante d'assembleur
-    Instruction();                                   // ici la condition est vraie
+    current = (TOKEN)lexer->yylex(); // sinon on exécute la ligne suivante d'assembleur
+
+    while (strcmp(lexer->YYText(), "ENDWHILE") != 0)
+        Instruction(); // ici la condition est vraie
+
     cout << "\tjmp	.while" << loopJmpId << endl;    // on revient au début de la boucle pour revérifier la condition
     cout << ".endwhile" << loopJmpId << ":" << endl; // on sort de la boucle
     if (current != KEYWORD || strcmp(lexer->YYText(), "ENDWHILE") != 0)
@@ -451,7 +456,8 @@ void IfStatement()
     cout << "\tcmp	$0, %rax" << endl;             // on compare avec 0
     cout << "\tje	.elseif" << blocJmpId << endl; // si égal à 0, on saute à la partie ELSE
 
-    Instruction(); // on exécute l'instruction dans le THEN
+    while (strcmp(lexer->YYText(), "ENDIF") != 0 && strcmp(lexer->YYText(), "ELSE") != 0)
+        Instruction(); // on exécute l'instruction dans le THEN
 
     cout << "\tjmp	.endif" << blocJmpId << endl; // on saute à la fin de l'IF
 
@@ -459,7 +465,8 @@ void IfStatement()
     if (current == KEYWORD && strcmp(lexer->YYText(), "ELSE") == 0)
     {
         current = (TOKEN)lexer->yylex(); // on passe au token suivant
-        Instruction();                   // on exécute l'instruction dans le ELSE
+        while (strcmp(lexer->YYText(), "ENDIF") != 0)
+            Instruction(); // on exécute l'instruction dans le ELSE
     }
 
     if (current != KEYWORD || strcmp(lexer->YYText(), "ENDIF") != 0)
