@@ -4,6 +4,7 @@ enum TOKEN
 {
     FEOF,
     UNKNOWN,
+    KEYWORD,
     NUMBER,
     ID,
     STRINGCONST,

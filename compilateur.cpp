@@ -51,9 +51,22 @@ void ThrowError(string message)
     cerr << "\033[31m"; // set color to red
     cerr << "ERREUR : " << message << endl;
     cerr << "\tPosition : ligne " << lexer->lineno() << endl;
-    cerr << "\tCaractères lus : " << lexer->YYText() << "'(" << current << ")'" << endl;
+    cerr << "\tCaractères lus : " << lexer->YYText() << " (type " << current << ")" << endl;
     cerr << "\033[0m"; // reset color
     exit(-1);
+}
+
+/*
+Affiche un message d’avertissement sur la sortie d’erreur standard.
+*/
+void ThrowWarning(string message)
+{
+    // set color to orange
+    cerr << "\033[33m"; // set color to yellow
+    cerr << "ATTENTION : " << message << endl;
+    cerr << "\tPosition : ligne " << lexer->lineno() << endl;
+    cerr << "\tCaractères lus : " << lexer->YYText() << " (type " << current << ")" << endl;
+    cerr << "\033[0m"; // reset color
 }
 
 /*
@@ -69,6 +82,11 @@ void PrintDebug(string message)
 void Identifier(void)
 {
     PrintDebug("Identifier()");
+    // si variable non assignée
+    if (variablesDeclares.find(lexer->YYText()) == variablesDeclares.end())
+        ThrowError("Variable non déclarée : " + string(lexer->YYText()));
+    else if (variablesDeclares[lexer->YYText()] == false)
+        ThrowError("Variable non assignée : " + string(lexer->YYText()));
     cout << "\tpush " << lexer->YYText() << endl;
     current = (TOKEN)lexer->yylex();
 }
@@ -107,7 +125,6 @@ void Factor()
         Identifier();
     else
         ThrowError("'(' ou nombre ou variable attendue");
-    PrintDebug("Fin de Factor()");
 }
 
 OPMUL MultiplicativeOperator(void)
@@ -138,7 +155,6 @@ void Term()
     {
         mulop = MultiplicativeOperator();
         Factor();
-        PrintDebug("calcul");
         cout << "\tpop	%rbx" << endl; // premier opérande
         cout << "\tpop	%rax" << endl; // second opérande
 
@@ -167,7 +183,6 @@ void Term()
             break;
         }
     }
-    PrintDebug("Fin de Term()");
 }
 
 // AdditiveOperator := "+" | "-" | "||"
@@ -206,7 +221,6 @@ void ArithmeticExpression()
     {
         adop = AdditiveOperator(); // Save operator in local variable
         Term();
-        PrintDebug("calcul");
         cout << "\tpop	%rbx" << endl; // get first operand
         cout << "\tpop	%rax" << endl; // get second operand
         switch (adop)
@@ -226,7 +240,6 @@ void ArithmeticExpression()
         }
         cout << "\tpush	%rax" << endl; // store result
     }
-    PrintDebug("Fin de ArithmeticExpression()");
 }
 
 OPREL CompareOperator()
@@ -256,47 +269,44 @@ void Expression()
     PrintDebug("Expression()");
     OPREL oprel;
     ArithmeticExpression();
-    PrintDebug("token actuel : " + string(lexer->YYText()));
     if (current == RELOP)
     {
         oprel = CompareOperator();
         ArithmeticExpression();
-        PrintDebug("comparaison");
         cout << "\tpop	%rbx" << endl; // get first operand
         cout << "\tpop	%rax" << endl; // get second operand
         cout << "\tcmp	%rbx, %rax" << endl;
         switch (oprel)
         {
         case INF:
-            cout << "\tjl	.true" << jmpId << endl;
+            cout << "\tjl	.truecmp" << jmpId << endl;
             break;
         case INFE:
-            cout << "\tjle	.true" << jmpId << endl;
+            cout << "\tjle	.truecmp" << jmpId << endl;
             break;
         case SUP:
-            cout << "\tjg	.true" << jmpId << endl;
+            cout << "\tjg	.truecmp" << jmpId << endl;
             break;
         case SUPE:
-            cout << "\tjge	.true" << jmpId << endl;
+            cout << "\tjge	.truecmp" << jmpId << endl;
             break;
         case EQU:
-            cout << "\tje	.true" << jmpId << endl;
+            cout << "\tje	.truecmp" << jmpId << endl;
             break;
         case DIFF:
-            cout << "\tjne	.true" << jmpId << endl;
+            cout << "\tjne	.truecmp" << jmpId << endl;
             break;
         default:
             ThrowError("Opérateur de comparaison attendu");
             break;
         }
         cout << "\tpush	$-1" << endl; // false
-        cout << "\tjmp	.next" << jmpId << endl;
-        cout << ".true" << jmpId << ":" << endl;
+        cout << "\tjmp	.endfalsecmp" << jmpId << endl;
+        cout << ".truecmp" << jmpId << ":" << endl;
         cout << "\tpush	$0" << endl; // true
-        cout << ".next" << jmpId << ":" << endl;
+        cout << ".endfalsecmp" << jmpId << ":" << endl;
         jmpId++;
     }
-    PrintDebug("Fin de Expression()");
 }
 
 void AssignationInstruction()
@@ -309,7 +319,7 @@ void AssignationInstruction()
     nomVariable = lexer->YYText();
     // si le nom de la variable n'est pas déclarée
     if (variablesDeclares.find(lexer->YYText()) == variablesDeclares.end())
-        ThrowError("Variable non déclarée : " + current);
+        ThrowError("Variable non déclarée : " + string(lexer->YYText()));
     else
         variablesDeclares[nomVariable] = true; // on déclare la variable comme initialisée/assignée/utilisée
 
@@ -324,16 +334,167 @@ void AssignationInstruction()
     cout << "\tpop " << nomVariable << endl;
 }
 
+void Instruction(); // forward declaration
+
+void ForStatement()
+{
+    PrintDebug("ForStatement()");
+    if (current != KEYWORD || strcmp(lexer->YYText(), "FOR") != 0)
+        ThrowError("'FOR' attendu");
+    current = (TOKEN)lexer->yylex();
+
+    if (current != ID)
+        ThrowError("Nom de variable attendu");
+    string nomVariableBoucle = lexer->YYText();
+    if (variablesDeclares.find(lexer->YYText()) == variablesDeclares.end())
+        ThrowError("Variable non déclarée : " + string(lexer->YYText()));
+    else if (variablesDeclares[nomVariableBoucle] == true)
+        ThrowError("Variable boucle FOR déjà assigné hors de la boucle, risque de perte de données : " + string(lexer->YYText()));
+    else
+        variablesDeclares[nomVariableBoucle] = true; // on déclare la variable comme utilisée
+
+    current = (TOKEN)lexer->yylex();
+    if (current != ASSIGN)
+        ThrowError("Opérateur ':=' attendu");
+
+    current = (TOKEN)lexer->yylex();
+    ArithmeticExpression(); // valeur de départ de la variable de boucle
+    cout << "\tpop " << nomVariableBoucle << endl;
+    cout << "\tmovq " << nomVariableBoucle << ", %rax" << endl;
+
+    // TO or DOWNTO
+    bool loopIncrement = true; // TO = true, DOWNTO = false
+    if (current == KEYWORD)
+    {
+        if (strcmp(lexer->YYText(), "TO") == 0)
+            loopIncrement = true; // boucle croissante
+        else if (strcmp(lexer->YYText(), "DOWNTO") == 0)
+            loopIncrement = false; // boucle décroissante
+        else
+            ThrowError("'TO' ou 'DOWNTO' attendu");
+    }
+    else
+        ThrowError("Keyword TO ou DOWNTO attendu");
+    current = (TOKEN)lexer->yylex();
+
+    ArithmeticExpression(); // valeur de fin de boucle
+    cout << "\tpop %rbx" << endl;
+    int loopJmpId = jmpId;                      // on sauvegarde l'ID de la boucle pour pouvoir le réutiliser même quand il sera incrémenté par ses propres instructions
+    jmpId++;                                    // on l'incrémente maintenant pour la différencier de ses propres instructions
+    cout << ".for" << loopJmpId << ":" << endl; // début de la boucle
+    cout << "\tcmp %rbx, %rax" << endl;
+    // si la valeur de boucle est dépasse la valeur de fin, on sort de la boucle
+    if (loopIncrement)
+        cout << "\tja .endfor" << loopJmpId << endl;
+    else
+        cout << "\tjb .endfor" << loopJmpId << endl;
+
+    cout << "\tpush " << nomVariableBoucle << endl; // on empile la variable de boucle pour pouvoir l'utiliser dans l'instruction increment/decrément
+
+    if (current != KEYWORD || strcmp(lexer->YYText(), "DO") != 0)
+        ThrowError("'DO' attendu");
+    current = (TOKEN)lexer->yylex();
+
+    Instruction(); // instruction dans la boucle
+
+    cout << "\tpop " << nomVariableBoucle << endl; // on dépile la variable de boucle pour l'utiliser dans l'instruction d'incrément/decrément
+    if (loopIncrement)
+        cout << "\taddq $1, " << nomVariableBoucle << endl; // on incrémente la variable de boucle
+    else
+        cout << "\tsubq $1, " << nomVariableBoucle << endl;     // on décrémente la variable de boucle
+    cout << "\tmovq " << nomVariableBoucle << ", %rax" << endl; // on met à jour la variable de boucle dans le registre
+    cout << "\tjmp .for" << loopJmpId << endl;                  // on revient au début de la boucle pour revérifier la condition
+    cout << ".endfor" << loopJmpId << ":" << endl;              // fin de la boucle
+    if (current != KEYWORD || strcmp(lexer->YYText(), "ENDFOR") != 0)
+        ThrowError("'ENDFOR' attendu");
+}
+
+void WhileStatement()
+{
+    PrintDebug("WhileStatement()");
+    if (current != KEYWORD || strcmp(lexer->YYText(), "WHILE") != 0)
+        ThrowError("'WHILE' attendu");
+    current = (TOKEN)lexer->yylex();
+    int loopJmpId = jmpId;                        // on sauvegarde l'ID de la boucle pour pouvoir le réutiliser même quand il sera incrémenté par ses propres instructions
+    jmpId++;                                      // on l'incrémente maintenant pour la différencier de ses propres instructions
+    cout << ".while" << loopJmpId << ":" << endl; // condition de la boucle
+    Expression();                                 // expression de la condition
+    cout << "\tpop	%rax" << endl;
+    cout << "\tcmp	$0, %rax" << endl;
+    cout << "\tje	.endwhile" << loopJmpId << endl; // si la condition est fausse, on sort de la boucle
+    if (current != KEYWORD || strcmp(lexer->YYText(), "DO") != 0)
+        ThrowError("'DO' attendu");
+    current = (TOKEN)lexer->yylex();                 // sinon on exécute la ligne suivante d'assembleur
+    Instruction();                                   // ici la condition est vraie
+    cout << "\tjmp	.while" << loopJmpId << endl;    // on revient au début de la boucle pour revérifier la condition
+    cout << ".endwhile" << loopJmpId << ":" << endl; // on sort de la boucle
+    if (current != KEYWORD || strcmp(lexer->YYText(), "ENDWHILE") != 0)
+        ThrowError("'ENDWHILE' attendu");
+}
+
+void IfStatement()
+{
+    PrintDebug("IfStatement()");
+    if (current != KEYWORD || strcmp(lexer->YYText(), "IF") != 0)
+        ThrowError("'IF' attendu");
+    current = (TOKEN)lexer->yylex(); // on passe au token suivant
+
+    Expression(); // on lit l'expression de la condition
+    if (current != KEYWORD || strcmp(lexer->YYText(), "THEN") != 0)
+        ThrowError("'THEN' attendu");
+    current = (TOKEN)lexer->yylex(); // on passe au token suivant
+
+    int blocJmpId = jmpId; // on sauvegarde l'ID du bloc pour pouvoir le réutiliser même quand il sera incrémenté par ses propres instructions
+    jmpId++;
+
+    cout << "\tpop	%rax" << endl;                 // on récupère le résultat de l'expression
+    cout << "\tcmp	$0, %rax" << endl;             // on compare avec 0
+    cout << "\tje	.elseif" << blocJmpId << endl; // si égal à 0, on saute à la partie ELSE
+
+    Instruction(); // on exécute l'instruction dans le THEN
+
+    cout << "\tjmp	.endif" << blocJmpId << endl; // on saute à la fin de l'IF
+
+    cout << ".elseif" << blocJmpId << ":" << endl; // jump au bloc ELSE
+    if (current == KEYWORD && strcmp(lexer->YYText(), "ELSE") == 0)
+    {
+        current = (TOKEN)lexer->yylex(); // on passe au token suivant
+        Instruction();                   // on exécute l'instruction dans le ELSE
+    }
+
+    if (current != KEYWORD || strcmp(lexer->YYText(), "ENDIF") != 0)
+        ThrowError("'ENDIF' attendu");
+    else
+        cout << ".endif" << blocJmpId << ":" << endl; // on sort de l'IF
+}
+
 void Instruction()
 {
     PrintDebug("Instruction()");
     if (current == SEMICOLON)
-        ThrowError("Instruction vide");
-    AssignationInstruction();
-    if (current != SEMICOLON)
-        ThrowError("Fin instruction inattendue, ';' manquant");
+        ThrowWarning("Instruction vide");
+    else if (current == KEYWORD)
+    {
+        if (strcmp(lexer->YYText(), "IF") == 0)
+            IfStatement();
+        else if (strcmp(lexer->YYText(), "WHILE") == 0)
+            WhileStatement();
+        else if (strcmp(lexer->YYText(), "FOR") == 0)
+            ForStatement();
+        else
+            ThrowError("Mot-clé inconnu : " + string(lexer->YYText()));
+    }
+    else if (current == ID)
+    {
+        AssignationInstruction();
+
+        if (current != SEMICOLON)
+            ThrowError("Fin instruction inattendue, ';' manquant");
+    }
     else
-        current = (TOKEN)lexer->yylex(); // on sort de l'instruction
+        ThrowError("Instruction inconnue : " + string(lexer->YYText()));
+
+    current = (TOKEN)lexer->yylex(); // on sort de l'instruction
 }
 
 void PartieDeclarationVariables()
@@ -346,7 +507,6 @@ void PartieDeclarationVariables()
 
     while (current != LBRACKET)
     {
-        // PrintDebug("Nom de variable : " + string(lexer->YYText()));
         if (current != ID)
             ThrowError("Nom de variable attendu");
         //  si le nom de la variable est déjà déclaré
@@ -375,8 +535,10 @@ void PartieAlgorithme()
     cout << "main:" << endl;
     cout << "\tmovq	%rsp, %rbp\t\t# Save the position of the stack's top" << endl;
 
-    PrintDebug("Token actuel : " + string(lexer->YYText()));
-    Instruction();
+    if (current == DOT) // si on est déjà à la fin du programme
+        ThrowWarning("Programme vide, '.' inattendu");
+    else
+        Instruction();
     while (current != DOT) // fin d'une instruction, on boucle si y en a plusieurs
     {
         Instruction();
@@ -384,6 +546,15 @@ void PartieAlgorithme()
     if (current != DOT) // fin du programme
         ThrowError("'.' attendu");
     current = (TOKEN)lexer->yylex(); // on sort de la partie algorithme
+
+    // Variables déclarées mais jamais utilisées
+    for (const auto &var : variablesDeclares)
+    {
+        if (var.second == false) // si la variable n'a pas été initialisée
+        {
+            ThrowWarning("Variable déclarée mais jamais utilisée : " + var.first);
+        }
+    }
 
     // Trailer for the gcc assembler / linker
     cout << "\tmovq	%rbp, %rsp\t\t# Restore the position of the stack's top" << endl;
@@ -415,6 +586,6 @@ int main()
     cout << "\tret\t\t\t# Return from main function" << endl;
     if (current != FEOF)
     {
-        ThrowError("Caractères supplémentaires à la fin de l'expression");
+        ThrowWarning("Fin de programme déclaré, mais code restant non compilé");
     }
 }

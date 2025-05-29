@@ -24,6 +24,7 @@ ws      [ \t\n\r]+
 alpha   [A-Za-z]
 digit   [0-9]
 number  {digit}+
+keyword	(DISPLAY|IF|THEN|ELSE|ENDIF|BEGIN|END|FOR|TO|DOWNTO|ENDFOR|WHILE|DO|ENDWHILE)
 id	{alpha}({alpha}|{digit})*
 addop	(\+|\-|\|\|)
 mulop	(\*|\/|%|\&\&)
@@ -36,6 +37,7 @@ unknown [^\"A-Za-z0-9 \n\r\t\(\)\<\>\=\!\%\&\|\}\-\;\.]+
 {mulop}		return MULOP;
 {relop}		return RELOP;
 {number}	return NUMBER;
+{keyword}	return KEYWORD;
 {id}		return ID;
 {stringconst}	return STRINGCONST;
 "["		return RBRACKET;
@@ -48,16 +50,16 @@ unknown [^\"A-Za-z0-9 \n\r\t\(\)\<\>\=\!\%\&\|\}\-\;\.]+
 ")"		return LPARENT;
 "!"		return NOT;
 <<EOF>>		return FEOF;
-{ws}    {/* skip blanks and tabs */};
-"(*"    { /* Skip comments between '(*' and '*)' */
+{ws}	{/* skip blanks and tabs */};
+"/*"	{/* Skip comments between / * and * / */
 		int c;
 		while((c = yyinput()) != 0){
-     			if(c == '*'){
-     	    			if((c = yyinput()) == ')')
-    	        			break;
-    	     			else
-  	          			unput(c);
-  	   		}	
+			if(c == '*'){
+				if((c = yyinput()) == '/')
+					break;
+				else
+					unput(c);
+			}	
 		}
 	};
 
