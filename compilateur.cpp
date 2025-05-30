@@ -14,6 +14,20 @@ enum VariableType
     INT,  // entier 64 bits
     BOOL, // booléen
 };
+
+string to_string(VariableType type)
+{
+    switch (type)
+    {
+    case VariableType::INT:
+        return "INT";
+    case VariableType::BOOL:
+        return "BOOL";
+    default:
+        return "UNKNOWN";
+    }
+}
+
 struct VariableProperties
 {
     VariableType type; // type de la variable
@@ -34,6 +48,27 @@ enum OPREL
     WTFR
 };
 
+string to_string(OPREL op)
+{
+    switch (op)
+    {
+    case EQU:
+        return "==";
+    case DIFF:
+        return "!=";
+    case INF:
+        return "<";
+    case SUP:
+        return ">";
+    case INFE:
+        return "<=";
+    case SUPE:
+        return ">=";
+    default:
+        return "WTFR";
+    }
+}
+
 enum OPADD
 {
     ADD,
@@ -41,6 +76,21 @@ enum OPADD
     OR,
     WTFA
 };
+
+string to_string(OPADD op)
+{
+    switch (op)
+    {
+    case ADD:
+        return "ADD";
+    case SUB:
+        return "SUB";
+    case OR:
+        return "OR";
+    default:
+        return "WTFA";
+    }
+}
 
 enum OPMUL
 {
@@ -50,6 +100,23 @@ enum OPMUL
     AND,
     WTFM
 };
+
+string to_string(OPMUL op)
+{
+    switch (op)
+    {
+    case MUL:
+        return "MUL";
+    case DIV:
+        return "DIV";
+    case MOD:
+        return "MOD";
+    case AND:
+        return "AND";
+    default:
+        return "WTFM";
+    }
+}
 
 TOKEN current; // Current token
 
@@ -92,52 +159,60 @@ void PrintDebug(string message)
     cerr << "\033[0m"; // reset color
 }
 
-void Identifier(void)
+VariableType Identifier()
 {
     PrintDebug("Identifier()");
+    VariableType typeIdentifier = variablesDeclarees[lexer->YYText()].type;
     if (variablesDeclarees.find(lexer->YYText()) == variablesDeclarees.end())
         ThrowError("Variable non déclarée : " + string(lexer->YYText()));
     else if (variablesDeclarees[lexer->YYText()].isAssigned == false)
         ThrowError("Variable non assignée : " + string(lexer->YYText()));
     cout << "\tpush " << lexer->YYText() << endl;
     current = (TOKEN)lexer->yylex();
+
+    return typeIdentifier;
 }
 
 // lire un nombre (suite de Digit())
-void Number()
+VariableType Number()
 {
     PrintDebug("Number()");
     // il ne peut gérer que des entiers 32 bits mais je n'arrive pas à faire une condition anti overflow
     cout << "\tpush $" << atoi(lexer->YYText()) << endl;
     current = (TOKEN)lexer->yylex();
+
+    return INT;
 }
 
 // fonction pour l'instant abstraite, définie plus bas
-void Expression();
+VariableType Expression();
 
 /*
 Représente un terme de l'expression :
 Soit un chiffre (via Digit()),
 Soit une sous-expression entre parenthèses.
 */
-void Factor()
+VariableType Factor()
 {
     PrintDebug("Factor()");
+    VariableType typeFactor;
     if (current == RPARENT)
     {
         current = (TOKEN)lexer->yylex();
-        Expression();
+        typeFactor = Expression();
         if (current != LPARENT)
             ThrowError("')' était attendu");
         else
             current = (TOKEN)lexer->yylex();
     }
     else if (current == NUMBER)
-        Number();
+        typeFactor = Number();
     else if (current == ID)
-        Identifier();
+        typeFactor = Identifier();
     else
         ThrowError("'(' ou nombre ou variable attendue");
+
+    return typeFactor;
 }
 
 OPMUL MultiplicativeOperator(void)
@@ -158,35 +233,49 @@ OPMUL MultiplicativeOperator(void)
     return opmul;
 }
 
-void Term()
+VariableType Term()
 {
     PrintDebug("Term()");
     OPMUL mulop;
-    Factor();
+    VariableType typeFactor1, typeFactor2;
+    typeFactor1 = Factor();
     // si le calcul se poursuit, ou se termine
     while (current == MULOP)
     {
         mulop = MultiplicativeOperator();
-        Factor();
+        typeFactor2 = Factor();
+
+        // vérification des types
+        if (typeFactor1 != typeFactor2)
+            ThrowError("Impossible de calculer, les opérandes n'ont pas le même type");
+
         cout << "\tpop	%rbx" << endl; // premier opérande
         cout << "\tpop	%rax" << endl; // second opérande
 
         switch (mulop)
         {
         case AND:
+            if (typeFactor1 == INT)
+                ThrowError("Opération illogique entre nombres " + to_string(mulop));
             cout << "\tandq	%rbx, %rax" << endl;
             cout << "\tpush %rax" << endl;
             break;
         case MUL:
+            if (typeFactor1 == BOOL)
+                ThrowError("Opération illogique entre booléens" + to_string(mulop));
             cout << "\timul %rbx, %rax" << endl;
             cout << "\tpush %rax" << endl;
             break;
         case DIV:
+            if (typeFactor1 == BOOL)
+                ThrowError("Opération illogique entre booléens" + to_string(mulop));
             cout << "\tmovq $0, %rdx" << endl; // clear remainder register
             cout << "\tidiv %rbx, %rax" << endl;
             cout << "\tpush %rax" << endl; // push result
             break;
         case MOD:
+            if (typeFactor1 == BOOL)
+                ThrowError("Opération illogique entre booléens" + to_string(mulop));
             cout << "\tmovq $0, %rdx" << endl; // clear remainder register
             cout << "\tidiv %rbx, %rax" << endl;
             cout << "\tpush %rdx" << endl; // push remainder
@@ -196,6 +285,8 @@ void Term()
             break;
         }
     }
+
+    return typeFactor1;
 }
 
 // AdditiveOperator := "+" | "-" | "||"
@@ -224,27 +315,39 @@ Pour chaque + ou - rencontré :
   - Applique l'opération : addq ou subq
   - Empile le résultat final avec push %rax.
 */
-void ArithmeticExpression()
+VariableType ArithmeticExpression()
 {
     PrintDebug("ArithmeticExpression()");
     OPADD adop; // ADditive OPerator
-    Term();
+    VariableType typeTerm1, typeTerm2;
+    typeTerm1 = Term();
     // si le calcul se poursuit, ou se termine
     while (current == ADDOP)
     {
         adop = AdditiveOperator(); // Save operator in local variable
-        Term();
+        typeTerm2 = Term();
+
+        // vérification des types
+        if (typeTerm1 != typeTerm2)
+            ThrowError("Impossible de calculer, les opérandes n'ont pas le même type");
+
         cout << "\tpop	%rbx" << endl; // get first operand
         cout << "\tpop	%rax" << endl; // get second operand
         switch (adop)
         {
         case OR:
+            if (typeTerm1 == INT)
+                ThrowError("Opération illogique entre nombres " + to_string(adop));
             cout << "\taddq	%rbx, %rax" << endl;
             break;
         case ADD:
+            if (typeTerm1 == BOOL)
+                ThrowError("Opération illogique entre booléens " + to_string(adop));
             cout << "\taddq	%rbx, %rax" << endl;
             break;
         case SUB:
+            if (typeTerm1 == BOOL)
+                ThrowError("Opération illogique entre booléens " + to_string(adop));
             cout << "\tsubq	%rbx, %rax" << endl;
             break;
         default:
@@ -253,6 +356,8 @@ void ArithmeticExpression()
         }
         cout << "\tpush	%rax" << endl; // store result
     }
+
+    return typeTerm1;
 }
 
 OPREL CompareOperator()
@@ -277,15 +382,21 @@ OPREL CompareOperator()
     return oprel;
 }
 
-void Expression()
+VariableType Expression()
 {
     PrintDebug("Expression()");
     OPREL oprel;
-    ArithmeticExpression();
+    VariableType typeExpr1, typeExpr2;
+    typeExpr1 = ArithmeticExpression();
     if (current == RELOP)
     {
         oprel = CompareOperator();
-        ArithmeticExpression();
+        typeExpr2 = ArithmeticExpression();
+
+        // vérification des types
+        if (typeExpr1 != typeExpr2)
+            ThrowError("Impossible de comparer, les opérandes n'ont pas le même type");
+
         cout << "\tpop	%rax" << endl; // get second operand
         cout << "\tpop	%rbx" << endl; // get first operand
         cout << "\tcmp	%rax, %rbx" << endl;
@@ -320,6 +431,8 @@ void Expression()
         cout << ".endcmp" << jmpId << ":" << endl;
         jmpId++;
     }
+
+    return typeExpr1;
 }
 
 void AssignationInstruction()
@@ -343,8 +456,12 @@ void AssignationInstruction()
         ThrowError("Opérateur ':=' attendu");
     else
         current = (TOKEN)lexer->yylex();
+    VariableType typeExpr = Expression();
 
-    Expression();
+    // vérification des types
+    if (variablesDeclarees[nomVariable].type != typeExpr)
+        ThrowError("Type de variable incompatible avec l'expression : " + nomVariable + " (variable de type " + to_string(variablesDeclarees[nomVariable].type) + ", expression de type " + to_string(typeExpr) + ")");
+
     cout << "\tpop " << nomVariable << endl;
 }
 
@@ -352,13 +469,31 @@ void PrintInstruction()
 {
     PrintDebug("PrintInstruction()");
     current = (TOKEN)lexer->yylex();
-    Expression(); // on lit l'expression à afficher
-    cout << "\tpop %rsi\t# The value to be displayed" << endl;
-    cout << "\tmovq $FormatPrintInt, %rdi" << endl;
-    cout << "\tmovl $0, %eax" << endl;
-    cout << "\tpush %rbp\t# save the value in %rbp (modified by printf)" << endl;
-    cout << "\tcall printf@PLT" << endl;
-    cout << "\tpop %rbp\t# restore the value in %rbp" << endl;
+    VariableType typeExpr;
+    typeExpr = Expression(); // on lit l'expression à afficher
+    switch (typeExpr)
+    {
+    case INT:
+        cout << "\tpop %rsi\t# The value to be displayed" << endl;
+        cout << "\tmovq $FormatPrintInt, %rdi" << endl;
+        cout << "\tmovl	$0, %eax" << endl;
+        cout << "\tcall	printf@PLT" << endl;
+        break;
+    case BOOL:
+        cout << "\tpop %rdx\t# Zero : False, non-zero : true" << endl;
+        cout << "\tcmpq $0, %rdx" << endl;
+        cout << "\tje .printfalse" << jmpId << endl;
+        cout << "\tmovq $FormatPrintTrue, %rdi" << endl;
+        cout << "\tjmp .endprint" << jmpId << endl;
+        cout << ".printfalse" << jmpId << ":" << endl;
+        cout << "\tmovq $FormatPrintFalse, %rdi" << endl;
+        cout << ".endprint" << jmpId << ":" << endl;
+        cout << "\tcall	puts@PLT" << endl;
+        break;
+    default:
+        ThrowError("Type d'expression non géré pour l'instruction PRINT : " + string(lexer->YYText()));
+    }
+
     if (current != SEMICOLON)
         ThrowError("Fin d'instruction ';' attendue");
 }
@@ -541,7 +676,9 @@ void PartieDeclarationVariables()
     PrintDebug("PartieDeclarationVariables()");
     cout << ".data" << endl;
     cout << "\t.align 8" << endl;
-    cout << "\tFormatPrintInt:\t.string \"%lld\\n\"\t# print 64-bit signed integers" << endl;
+    cout << "\tFormatPrintInt: .string \"%lld\\n\"\t# print 64-bit signed integers" << endl;
+    cout << "\tFormatPrintTrue: .string \"True\"\t# print boolean true" << endl;
+    cout << "\tFormatPrintFalse: .string \"False\"\t# print boolean false" << endl;
     if (current != VARDECL)
         return; // il n'y a pas de variables à déclarer
 

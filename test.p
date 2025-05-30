@@ -3,7 +3,7 @@ DECLARE CONST INT b := 3;
 DECLARE BOOL c := True;
 DECLARE CONST BOOL d := False;
 
-a := a + b;
-PRINT a >= b;
+c := c || d;
+PRINT c;
 
 EXIT
