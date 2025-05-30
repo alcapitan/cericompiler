@@ -24,7 +24,7 @@ ws      [ \t\n\r]+
 alpha   [A-Za-z]
 digit   [0-9]
 number  -?{digit}+
-keyword	(DISPLAY|IF|THEN|ELSE|ENDIF|BEGIN|END|FOR|TO|DOWNTO|ENDFOR|WHILE|DO|ENDWHILE)
+keyword	(PRINT|IF|THEN|ELSE|ENDIF|BEGIN|END|FOR|TO|DOWNTO|ENDFOR|WHILE|DO|ENDWHILE)
 id	{alpha}({alpha}|{digit})*
 addop	(\+|\-|\|\|)
 mulop	(\*|\/|%|\&\&)

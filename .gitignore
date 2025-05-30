@@ -7,3 +7,5 @@ test
 # les fichiers de sortie du compilateur
 *.o
 tokeniser.cpp
+# les fichiers de l'IDE
+.vscode

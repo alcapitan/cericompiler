@@ -51,7 +51,7 @@ void ThrowError(string message)
     cerr << "\033[31m"; // set color to red
     cerr << "ERREUR : " << message << endl;
     cerr << "\tPosition : ligne " << lexer->lineno() << endl;
-    cerr << "\tCaractères lus : " << lexer->YYText() << " (type " << current << ")" << endl;
+    cerr << "\tCaractères lu : " << lexer->YYText() << " (type " << current << ")" << endl;
     cerr << "\033[0m"; // reset color
     exit(-1);
 }
@@ -95,6 +95,7 @@ void Identifier(void)
 void Number()
 {
     PrintDebug("Number()");
+    // il ne peut gérer que des entiers 32 bits mais je n'arrive pas à faire une condition anti overflow
     cout << "\tpush $" << atoi(lexer->YYText()) << endl;
     current = (TOKEN)lexer->yylex();
 }
@@ -273,9 +274,9 @@ void Expression()
     {
         oprel = CompareOperator();
         ArithmeticExpression();
-        cout << "\tpop	%rbx" << endl; // get first operand
         cout << "\tpop	%rax" << endl; // get second operand
-        cout << "\tcmp	%rbx, %rax" << endl;
+        cout << "\tpop	%rbx" << endl; // get first operand
+        cout << "\tcmp	%rax, %rbx" << endl;
         switch (oprel)
         {
         case INF:
@@ -300,11 +301,11 @@ void Expression()
             ThrowError("Opérateur de comparaison attendu");
             break;
         }
-        cout << "\tpush	$-1" << endl; // false
-        cout << "\tjmp	.endfalsecmp" << jmpId << endl;
+        cout << "\tpush $0\t\t# False" << endl; // false
+        cout << "\tjmp	.endcmp" << jmpId << endl;
         cout << ".truecmp" << jmpId << ":" << endl;
-        cout << "\tpush	$0" << endl; // true
-        cout << ".endfalsecmp" << jmpId << ":" << endl;
+        cout << "\tpush $-1\t\t# True" << endl; // true
+        cout << ".endcmp" << jmpId << ":" << endl;
         jmpId++;
     }
 }
@@ -332,6 +333,23 @@ void AssignationInstruction()
     Expression();
     //? rajout, à voir si fonctionnel
     cout << "\tpop " << nomVariable << endl;
+}
+
+void PrintInstruction()
+{
+    PrintDebug("PrintInstruction()");
+    current = (TOKEN)lexer->yylex();
+    string nomVariable = lexer->YYText();
+    cout << "\tpush " << nomVariable << "\t# Push the variable to be printed onto the stack" << endl;
+    cout << "\tpop %rsi\t# The value to be displayed" << endl;
+    cout << "\tmovq $FormatPrintInt, %rdi" << endl;
+    cout << "\tmovl $0, %eax" << endl;
+    cout << "\tpush %rbp\t# save the value in %rbp (modified by printf)" << endl;
+    cout << "\tcall printf@PLT" << endl;
+    cout << "\tpop %rbp\t# restore the value in %rbp" << endl;
+    current = (TOKEN)lexer->yylex(); // on passe au token suivant
+    if (current != SEMICOLON)
+        ThrowError("Fin d'instruction ';' attendue");
 }
 
 void Instruction(); // forward declaration
@@ -385,9 +403,9 @@ void ForStatement()
     cout << "\tcmp %rbx, %rax" << endl;
     // si la valeur de boucle est dépasse la valeur de fin, on sort de la boucle
     if (loopIncrement)
-        cout << "\tja .endfor" << loopJmpId << endl;
+        cout << "\tjg .endfor" << loopJmpId << endl;
     else
-        cout << "\tjb .endfor" << loopJmpId << endl;
+        cout << "\tjl .endfor" << loopJmpId << endl;
 
     cout << "\tpush " << nomVariableBoucle << endl; // on empile la variable de boucle pour pouvoir l'utiliser dans l'instruction increment/decrément
 
@@ -452,16 +470,16 @@ void IfStatement()
     int blocJmpId = jmpId; // on sauvegarde l'ID du bloc pour pouvoir le réutiliser même quand il sera incrémenté par ses propres instructions
     jmpId++;
 
-    cout << "\tpop	%rax" << endl;                 // on récupère le résultat de l'expression
-    cout << "\tcmp	$0, %rax" << endl;             // on compare avec 0
-    cout << "\tje	.elseif" << blocJmpId << endl; // si égal à 0, on saute à la partie ELSE
+    cout << "\tpop	%rax" << endl;               // on récupère le résultat de l'expression
+    cout << "\tcmp	$0, %rax" << endl;           // on compare avec 0
+    cout << "\tje	.else" << blocJmpId << endl; // si égal à 0, on saute à la partie ELSE
 
     while (strcmp(lexer->YYText(), "ENDIF") != 0 && strcmp(lexer->YYText(), "ELSE") != 0)
         Instruction(); // on exécute l'instruction dans le THEN
 
     cout << "\tjmp	.endif" << blocJmpId << endl; // on saute à la fin de l'IF
 
-    cout << ".elseif" << blocJmpId << ":" << endl; // jump au bloc ELSE
+    cout << ".else" << blocJmpId << ":" << endl; // jump au bloc ELSE
     if (current == KEYWORD && strcmp(lexer->YYText(), "ELSE") == 0)
     {
         current = (TOKEN)lexer->yylex(); // on passe au token suivant
@@ -488,8 +506,10 @@ void Instruction()
             WhileStatement();
         else if (strcmp(lexer->YYText(), "FOR") == 0)
             ForStatement();
+        else if (strcmp(lexer->YYText(), "PRINT") == 0)
+            PrintInstruction();
         else
-            ThrowError("Mot-clé inconnu : " + string(lexer->YYText()));
+            ThrowError("Mot-clé inattendu : " + string(lexer->YYText()));
     }
     else if (current == ID)
     {
@@ -507,11 +527,13 @@ void Instruction()
 void PartieDeclarationVariables()
 {
     PrintDebug("PartieDeclarationVariables()");
-    if (current != RBRACKET)
-        ThrowError("'[' attendu");
     cout << ".data" << endl;
-    current = (TOKEN)lexer->yylex();
+    cout << "\t.align 8" << endl;
+    cout << "\tFormatPrintInt:\t.string \"%lld\\n\"\t# print 64-bit signed integers" << endl;
+    if (current != RBRACKET)
+        return; // il n'y a pas de variables à déclarer
 
+    current = (TOKEN)lexer->yylex();
     while (current != LBRACKET)
     {
         if (current != ID)
@@ -537,6 +559,7 @@ void PartieDeclarationVariables()
 
 void PartieAlgorithme()
 {
+    PrintDebug("PartieAlgorithme()");
     cout << ".text\t\t# The following lines contain the program" << endl;
     cout << "\t.globl	main\t\t# The main function must be visible from outside" << endl;
     cout << "main:" << endl;
