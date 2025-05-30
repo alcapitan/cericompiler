@@ -24,7 +24,10 @@ ws      [ \t\n\r]+
 alpha   [A-Za-z]
 digit   [0-9]
 number  -?{digit}+
-keyword	(PRINT|IF|THEN|ELSE|ENDIF|BEGIN|END|FOR|TO|DOWNTO|ENDFOR|WHILE|DO|ENDWHILE)
+boolval (True|False)
+vardecl (DECLARE|CONST)
+vartype (INT|BOOL)
+keyword	(PRINT|IF|THEN|ELSE|ENDIF|FOR|TO|DOWNTO|ENDFOR|WHILE|DO|ENDWHILE)
 id	{alpha}({alpha}|{digit})*
 addop	(\+|\-|\|\|)
 mulop	(\*|\/|%|\&\&)
@@ -37,14 +40,17 @@ unknown [^\"A-Za-z0-9 \n\r\t\(\)\<\>\=\!\%\&\|\}\-\;\.]+
 {mulop}		return MULOP;
 {relop}		return RELOP;
 {number}	return NUMBER;
+{boolval}		return BOOLVAL;
+{vardecl}	return VARDECL;
+{vartype}	return VARTYPE;
 {keyword}	return KEYWORD;
+"EXIT"		return EXIT;
 {id}		return ID;
 {stringconst}	return STRINGCONST;
 "["		return RBRACKET;
 "]"		return LBRACKET;
 ","		return COMMA;
 ";"		return SEMICOLON;
-"."		return DOT;
 ":="		return ASSIGN;
 "("		return RPARENT;
 ")"		return LPARENT;

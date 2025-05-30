@@ -4,6 +4,9 @@ enum TOKEN
 {
     FEOF,
     UNKNOWN,
+    BOOLVAL,
+    VARDECL,
+    VARTYPE,
     KEYWORD,
     NUMBER,
     ID,
@@ -14,7 +17,7 @@ enum TOKEN
     LPARENT,
     COMMA,
     SEMICOLON,
-    DOT,
+    EXIT,
     ADDOP,
     MULOP,
     RELOP,

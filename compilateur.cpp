@@ -2,13 +2,26 @@
 #include <cstdlib>
 #include <string>
 #include <cstring>
+#include <vector>
 #include <unordered_map>
 #include <FlexLexer.h>
 #include "tokeniser.h"
 using namespace std;
 
-int jmpId = 0;                                 // permet d'identifier chaque condition
-unordered_map<string, bool> variablesDeclares; // tableau de variables déclarées (nom, et si elles sont initialisées)
+int jmpId = 0; // permet d'identifier chaque condition
+enum VariableType
+{
+    INT,  // entier 64 bits
+    BOOL, // booléen
+};
+struct VariableProperties
+{
+    VariableType type; // type de la variable
+    bool isAssigned;   // si la variable a une valeur assignée
+    bool isConst;      // si la variable est constante
+};
+
+unordered_map<string, VariableProperties> variablesDeclarees; // liste des variables déclarées (nom, type, si elles sont assignées, si elles sont constantes)
 
 enum OPREL
 {
@@ -82,10 +95,9 @@ void PrintDebug(string message)
 void Identifier(void)
 {
     PrintDebug("Identifier()");
-    // si variable non assignée
-    if (variablesDeclares.find(lexer->YYText()) == variablesDeclares.end())
+    if (variablesDeclarees.find(lexer->YYText()) == variablesDeclarees.end())
         ThrowError("Variable non déclarée : " + string(lexer->YYText()));
-    else if (variablesDeclares[lexer->YYText()] == false)
+    else if (variablesDeclarees[lexer->YYText()].isAssigned == false)
         ThrowError("Variable non assignée : " + string(lexer->YYText()));
     cout << "\tpush " << lexer->YYText() << endl;
     current = (TOKEN)lexer->yylex();
@@ -319,19 +331,20 @@ void AssignationInstruction()
         ThrowError("Nom de variable attendu");
     nomVariable = lexer->YYText();
     // si le nom de la variable n'est pas déclarée
-    if (variablesDeclares.find(lexer->YYText()) == variablesDeclares.end())
+    if (variablesDeclarees.find(lexer->YYText()) == variablesDeclarees.end())
         ThrowError("Variable non déclarée : " + string(lexer->YYText()));
+    else if (variablesDeclarees[nomVariable].isConst == true && variablesDeclarees[nomVariable].isAssigned == true)
+        ThrowError("Variable constante déjà assigné : " + string(lexer->YYText()));
     else
-        variablesDeclares[nomVariable] = true; // on déclare la variable comme initialisée/assignée/utilisée
+        variablesDeclarees[nomVariable].isAssigned = true; // on marque la variable comme assignée
 
-    current = (TOKEN)lexer->yylex(); // on passe au token suivant
+    current = (TOKEN)lexer->yylex();
     if (current != ASSIGN)
         ThrowError("Opérateur ':=' attendu");
     else
         current = (TOKEN)lexer->yylex();
 
     Expression();
-    //? rajout, à voir si fonctionnel
     cout << "\tpop " << nomVariable << endl;
 }
 
@@ -339,15 +352,13 @@ void PrintInstruction()
 {
     PrintDebug("PrintInstruction()");
     current = (TOKEN)lexer->yylex();
-    string nomVariable = lexer->YYText();
-    cout << "\tpush " << nomVariable << "\t# Push the variable to be printed onto the stack" << endl;
+    Expression(); // on lit l'expression à afficher
     cout << "\tpop %rsi\t# The value to be displayed" << endl;
     cout << "\tmovq $FormatPrintInt, %rdi" << endl;
     cout << "\tmovl $0, %eax" << endl;
     cout << "\tpush %rbp\t# save the value in %rbp (modified by printf)" << endl;
     cout << "\tcall printf@PLT" << endl;
     cout << "\tpop %rbp\t# restore the value in %rbp" << endl;
-    current = (TOKEN)lexer->yylex(); // on passe au token suivant
     if (current != SEMICOLON)
         ThrowError("Fin d'instruction ';' attendue");
 }
@@ -364,12 +375,11 @@ void ForStatement()
     if (current != ID)
         ThrowError("Nom de variable attendu");
     string nomVariableBoucle = lexer->YYText();
-    if (variablesDeclares.find(lexer->YYText()) == variablesDeclares.end())
+    if (variablesDeclarees.find(lexer->YYText()) == variablesDeclarees.end())
         ThrowError("Variable non déclarée : " + string(lexer->YYText()));
-    else if (variablesDeclares[nomVariableBoucle] == true)
+    else if (variablesDeclarees[nomVariableBoucle].isAssigned == true)
         ThrowError("Variable boucle FOR déjà assigné hors de la boucle, risque de perte de données : " + string(lexer->YYText()));
-    else
-        variablesDeclares[nomVariableBoucle] = true; // on déclare la variable comme utilisée
+    variablesDeclarees[nomVariableBoucle].isAssigned = true; // on déclare la variable comme utilisée
 
     current = (TOKEN)lexer->yylex();
     if (current != ASSIGN)
@@ -460,12 +470,12 @@ void IfStatement()
     PrintDebug("IfStatement()");
     if (current != KEYWORD || strcmp(lexer->YYText(), "IF") != 0)
         ThrowError("'IF' attendu");
-    current = (TOKEN)lexer->yylex(); // on passe au token suivant
+    current = (TOKEN)lexer->yylex();
 
     Expression(); // on lit l'expression de la condition
     if (current != KEYWORD || strcmp(lexer->YYText(), "THEN") != 0)
         ThrowError("'THEN' attendu");
-    current = (TOKEN)lexer->yylex(); // on passe au token suivant
+    current = (TOKEN)lexer->yylex();
 
     int blocJmpId = jmpId; // on sauvegarde l'ID du bloc pour pouvoir le réutiliser même quand il sera incrémenté par ses propres instructions
     jmpId++;
@@ -482,7 +492,7 @@ void IfStatement()
     cout << ".else" << blocJmpId << ":" << endl; // jump au bloc ELSE
     if (current == KEYWORD && strcmp(lexer->YYText(), "ELSE") == 0)
     {
-        current = (TOKEN)lexer->yylex(); // on passe au token suivant
+        current = (TOKEN)lexer->yylex();
         while (strcmp(lexer->YYText(), "ENDIF") != 0)
             Instruction(); // on exécute l'instruction dans le ELSE
     }
@@ -518,6 +528,8 @@ void Instruction()
         if (current != SEMICOLON)
             ThrowError("Fin instruction inattendue, ';' manquant");
     }
+    else if (current == VARDECL)
+        ThrowError("Les variables doivent être déclarées avant toute instruction");
     else
         ThrowError("Instruction inconnue : " + string(lexer->YYText()));
 
@@ -530,31 +542,87 @@ void PartieDeclarationVariables()
     cout << ".data" << endl;
     cout << "\t.align 8" << endl;
     cout << "\tFormatPrintInt:\t.string \"%lld\\n\"\t# print 64-bit signed integers" << endl;
-    if (current != RBRACKET)
+    if (current != VARDECL)
         return; // il n'y a pas de variables à déclarer
 
-    current = (TOKEN)lexer->yylex();
-    while (current != LBRACKET)
+    // on boucle tant que le token est DECLARE de VARDECL
+    while (current == VARDECL)
     {
-        if (current != ID)
-            ThrowError("Nom de variable attendu");
-        //  si le nom de la variable est déjà déclaré
-        if (variablesDeclares.find(lexer->YYText()) != variablesDeclares.end())
+        // Instruction DECLARE obligatoire
+        if (strcmp(lexer->YYText(), "DECLARE") != 0)
+            ThrowError("Une déclaration de variable doit commencer par 'DECLARE'");
+
+        // vérification si déclaration de variable constante
+        current = (TOKEN)lexer->yylex();
+        bool isConst = false; // si la variable est constante
+        if (current == VARDECL && strcmp(lexer->YYText(), "CONST") == 0)
         {
-            ThrowError("Variable déjà déclarée : " + current);
+            isConst = true; // si la variable est constante
+            current = (TOKEN)lexer->yylex();
+            PrintDebug("Variable constante");
         }
         else
+            PrintDebug("Variable non constante");
+
+        // Type de variable
+        if (current != VARTYPE)
+            ThrowError("Type de variable manquant après 'DECLARE'");
+        VariableType typeVariable;
+        if (strcmp(lexer->YYText(), "INT") == 0)
+            typeVariable = INT;
+        else if (strcmp(lexer->YYText(), "BOOL") == 0)
+            typeVariable = BOOL;
+        else
+            ThrowError("Type de variable inconnu : " + string(lexer->YYText()));
+        PrintDebug("Type de variable : " + string(lexer->YYText()));
+
+        // Nom de variable
+        current = (TOKEN)lexer->yylex();
+        if (current != ID)
+            ThrowError("Nom de variable manquant après le type de variable");
+        string nomVariable = lexer->YYText();
+
+        current = (TOKEN)lexer->yylex();
+        // si assignation dès la déclaration
+        if (current == ASSIGN)
         {
-            variablesDeclares[lexer->YYText()] = false;                    // on déclare la variable dans notre liste
-            cout << "\t" << lexer->YYText() << ":\t" << ".quad 0" << endl; // on déclare la variable
-        }
-        current = (TOKEN)lexer->yylex(); // on passe au token suivant
-        if (current == COMMA)            // variable suivante
             current = (TOKEN)lexer->yylex();
-        else if (current != LBRACKET) // si ce n'est ni , ni ] alors c'est une erreur
-            ThrowError("Déclaration variables : ',' attendu");
+            if (typeVariable == INT)
+            {
+                if (current != NUMBER)
+                    ThrowError("Les expressions ne sont pas autorisées dans la déclaration de variable");
+                cout << "\t" << nomVariable << ":\t" << ".quad " << lexer->YYText() << endl;
+            }
+            else if (typeVariable == BOOL)
+            {
+                if (current != BOOLVAL)
+                    ThrowError("Valeur booléenne attendue pour la variable constante");
+                if (strcmp(lexer->YYText(), "True") == 0)
+                    cout << "\t" << nomVariable << ":\t" << ".quad -1\t\t# True" << endl;
+                else if (strcmp(lexer->YYText(), "False") == 0)
+                    cout << "\t" << nomVariable << ":\t" << ".quad 0\t\t# False" << endl;
+                else
+                    ThrowError("Valeur booléenne inconnue : " + string(lexer->YYText()));
+            }
+            else
+                ThrowError("Type de variable inconnu : " + string(lexer->YYText()));
+
+            variablesDeclarees[nomVariable] = {typeVariable, true, isConst}; // type de la variable, si elle est assignée, si elle est constante
+
+            current = (TOKEN)lexer->yylex();
+        }
+        else
+            variablesDeclarees[nomVariable] = {typeVariable, false, isConst}; // type de la variable, si elle est assignée, si elle est constante
+
+        // point-virgule
+        if (current != SEMICOLON)
+            ThrowError("Fin de déclaration de variable manquante, ';' attendu");
+        if (current == VARDECL)
+        {
+            PrintDebug("Prochaine déclaration de variable");
+        }
+        current = (TOKEN)lexer->yylex(); // on sort de la partie déclaration variables
     }
-    current = (TOKEN)lexer->yylex(); // on sort de la partie déclaration variables
 }
 
 void PartieAlgorithme()
@@ -565,22 +633,22 @@ void PartieAlgorithme()
     cout << "main:" << endl;
     cout << "\tmovq	%rsp, %rbp\t\t# Save the position of the stack's top" << endl;
 
-    if (current == DOT) // si on est déjà à la fin du programme
-        ThrowWarning("Programme vide, '.' inattendu");
+    if (current == EXIT) // si on est déjà à la fin du programme
+        ThrowWarning("Aucune instruction trouvée, programme vide");
     else
         Instruction();
-    while (current != DOT) // fin d'une instruction, on boucle si y en a plusieurs
+    while (current != EXIT) // fin d'une instruction, on boucle si y en a plusieurs
     {
         Instruction();
     }
-    if (current != DOT) // fin du programme
+    if (current != EXIT) // fin du programme
         ThrowError("'.' attendu");
     current = (TOKEN)lexer->yylex(); // on sort de la partie algorithme
 
     // Variables déclarées mais jamais utilisées
-    for (const auto &var : variablesDeclares)
+    for (const auto &var : variablesDeclarees)
     {
-        if (var.second == false) // si la variable n'a pas été initialisée
+        if (var.second.isAssigned == false) // si la variable n'a pas été initialisée
         {
             ThrowWarning("Variable déclarée mais jamais utilisée : " + var.first);
         }
@@ -593,8 +661,10 @@ void PartieAlgorithme()
 void Program()
 {
     PrintDebug("Program()");
-    if (current == RBRACKET)
-        PartieDeclarationVariables();
+
+    // cette partie est obligatoirement appelée car on l'utilise pour les format pour PRINT
+    PartieDeclarationVariables();
+
     PartieAlgorithme();
 }
 
