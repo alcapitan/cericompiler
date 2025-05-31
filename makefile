@@ -2,7 +2,7 @@ all: test
 
 clean:
 	rm -f *.o *.s
-	rm tokeniser.cpp
+	rm -f tokeniser.cpp compilateur test
 
 tokeniser.cpp: tokeniser.l
 	flex++ -d -otokeniser.cpp tokeniser.l

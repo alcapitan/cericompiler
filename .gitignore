@@ -1,11 +1,8 @@
-# le code du compilateur compilé
-compilateur
-# le code à compiler assemblé
-test.s
-# le code à compiler compilé
-test
-# les fichiers de sortie du compilateur
-*.o
-tokeniser.cpp
 # les fichiers de l'IDE
 .vscode
+# les fichiers de compilation
+*.o
+tokeniser.cpp
+compilateur
+test.s
+test

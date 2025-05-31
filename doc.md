@@ -30,6 +30,8 @@ DECLARE CONST INT c;
 DECLARE CONST BOOL d := True;
 ```
 
+Attention, les valeurs à l'initialisation ne doivent pas être des expressions, mais des valeurs simples.
+
 Le compilateur empêche :
 
 -   L'utilisation de variables non initialisées.
