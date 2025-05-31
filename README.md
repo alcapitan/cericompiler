@@ -2,34 +2,39 @@
 
 **Auteur :** BOYER Alexandre
 
-Projet de Licence 2 Informatique à Avignon Université.  
-Compilateur écrit en C++ traduisant un langage fictif semblable à Pascal vers le langage Assembleur (64bit 80x86 AT&T).
+Projet de Licence 2 Informatique (année 2024-25) à Avignon Université.  
+Compilateur écrit en C++ traduisant un langage fictif semblable à Pascal vers le langage Assembleur (64bit AT&T).
 
-## Utilisation
+_Projet source : [Framagit Jourlin](https://framagit.org/jourlin/cericompiler)_
 
-Compiler le compilateur :
+> ### Notes pour le correcteur :
+>
+> J'ai fait les TP 1 à 6 inclus.
+
+## Documentation sur le langage
+
+J'ai parfois divergé des consignes sur le langage reconnu, non pas par difficulté, mais par choix de conception.  
+Bien que semblable à Pascal, veuillez retrouver la documentation complète dans `doc.md` et dans le fichier `test.p` qui contient des exemples de code.
+
+## Commandes d'utilisation
+
+Dépendances nécessaires : `g++`, `gcc`, `make`, `flex`.
+
+Pour compiler le compilateur :
 
 ```bash
-g++ compilateur.cpp -o compilateur
+make compilateur
 ```
 
-Utiliser le compilateur :
+Pour compiler le programme `test.p` :
 
 ```bash
-cat test.p | ./compilateur > test.s 2> /dev/null
+make test
+./test # pour exécuter le programme compilé
 ```
 
-_Ici le fichier d'entrée contenant un code de notre langage fictif est `test.p` et le fichier de sortie contenant le code assembleur est `test.s`._
-
-Pour voir le code assembleur généré :
+Pour voir le code assembleur généré sur le terminal (avec les logs, les warnings et les erreurs) :
 
 ```bash
-cat test.s
-```
-
-Pour compiler et exécuter le code assembleur généré :
-
-```bash
-gcc test.s -o test
-./test
+./compilateur < test.p
 ```

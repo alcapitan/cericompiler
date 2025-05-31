@@ -184,6 +184,21 @@ VariableType Number()
     return INT;
 }
 
+VariableType Boolean()
+{
+    PrintDebug("Boolean()");
+    VariableType typeBool;
+    if (strcmp(lexer->YYText(), "True") == 0)
+        cout << "\tpush $-1\t\t# True" << endl;
+    else if (strcmp(lexer->YYText(), "False") == 0)
+        cout << "\tpush $0\t\t# False" << endl;
+    else
+        ThrowError("Valeur booléenne inconnue : " + string(lexer->YYText()));
+    current = (TOKEN)lexer->yylex();
+
+    return BOOL;
+}
+
 // fonction pour l'instant abstraite, définie plus bas
 VariableType Expression();
 
@@ -207,6 +222,8 @@ VariableType Factor()
     }
     else if (current == NUMBER)
         typeFactor = Number();
+    else if (current == BOOLVAL)
+        typeFactor = Boolean();
     else if (current == ID)
         typeFactor = Identifier();
     else
@@ -430,9 +447,11 @@ VariableType Expression()
         cout << "\tpush $-1\t\t# True" << endl; // true
         cout << ".endcmp" << jmpId << ":" << endl;
         jmpId++;
+
+        return BOOL; // le résultat d'une comparaison est toujours un booléen
     }
 
-    return typeExpr1;
+    return typeExpr1; // si pas de comparaison, on retourne le type de l'expression
 }
 
 void AssignationInstruction()
@@ -476,8 +495,8 @@ void PrintInstruction()
     case INT:
         cout << "\tpop %rsi\t# The value to be displayed" << endl;
         cout << "\tmovq $FormatPrintInt, %rdi" << endl;
-        cout << "\tmovl	$0, %eax" << endl;
-        cout << "\tcall	printf@PLT" << endl;
+        cout << "\tmovl $0, %eax" << endl;
+        cout << "\tcall printf@PLT" << endl;
         break;
     case BOOL:
         cout << "\tpop %rdx\t# Zero : False, non-zero : true" << endl;
@@ -489,6 +508,7 @@ void PrintInstruction()
         cout << "\tmovq $FormatPrintFalse, %rdi" << endl;
         cout << ".endprint" << jmpId << ":" << endl;
         cout << "\tcall	puts@PLT" << endl;
+        jmpId++;
         break;
     default:
         ThrowError("Type d'expression non géré pour l'instruction PRINT : " + string(lexer->YYText()));
@@ -513,7 +533,7 @@ void ForStatement()
     if (variablesDeclarees.find(lexer->YYText()) == variablesDeclarees.end())
         ThrowError("Variable non déclarée : " + string(lexer->YYText()));
     else if (variablesDeclarees[nomVariableBoucle].isAssigned == true)
-        ThrowError("Variable boucle FOR déjà assigné hors de la boucle, risque de perte de données : " + string(lexer->YYText()));
+        ThrowWarning("Variable boucle FOR déjà assigné hors de la boucle, risque de perte de données : " + string(lexer->YYText()));
     variablesDeclarees[nomVariableBoucle].isAssigned = true; // on déclare la variable comme utilisée
 
     current = (TOKEN)lexer->yylex();
@@ -749,7 +769,16 @@ void PartieDeclarationVariables()
             current = (TOKEN)lexer->yylex();
         }
         else
+        {
+            if (typeVariable == INT)
+                cout << "\t" << nomVariable << ":\t" << ".quad 0\t\t# Initialisation à 0" << endl;
+            else if (typeVariable == BOOL)
+                cout << "\t" << nomVariable << ":\t" << ".quad 0\t\t# Initialisation à False" << endl;
+            else
+                ThrowError("Type de variable inconnu : " + string(lexer->YYText()));
+
             variablesDeclarees[nomVariable] = {typeVariable, false, isConst}; // type de la variable, si elle est assignée, si elle est constante
+        }
 
         // point-virgule
         if (current != SEMICOLON)
@@ -766,9 +795,9 @@ void PartieAlgorithme()
 {
     PrintDebug("PartieAlgorithme()");
     cout << ".text\t\t# The following lines contain the program" << endl;
-    cout << "\t.globl	main\t\t# The main function must be visible from outside" << endl;
+    cout << "\t.globl main\t\t# The main function must be visible from outside" << endl;
     cout << "main:" << endl;
-    cout << "\tmovq	%rsp, %rbp\t\t# Save the position of the stack's top" << endl;
+    cout << "\tmovq %rsp, %rbp\t\t# Save the position of the stack's top" << endl;
 
     if (current == EXIT) // si on est déjà à la fin du programme
         ThrowWarning("Aucune instruction trouvée, programme vide");
@@ -792,7 +821,7 @@ void PartieAlgorithme()
     }
 
     // Trailer for the gcc assembler / linker
-    cout << "\tmovq	%rbp, %rsp\t\t# Restore the position of the stack's top" << endl;
+    cout << "\tmovq %rbp, %rsp\t\t# Restore the position of the stack's top" << endl;
 }
 
 void Program()
@@ -820,7 +849,7 @@ int main()
     current = (TOKEN)lexer->yylex();
     Program();
 
-    cout << "\tret\t\t\t# Return from main function" << endl;
+    cout << "\tret\t\t# Return from main function" << endl;
     if (current != FEOF)
     {
         ThrowWarning("Fin de programme déclaré, mais code restant non compilé");
